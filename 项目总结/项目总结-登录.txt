@@ -1,0 +1,70 @@
+登录模块
+
+WebSecurityConfigurationAdapter类
+继承WebSecurityConfigurerAdapter
+用作spring security 配置类的实现
+
+FantUsernamePasswordAuthenticationProvider类（手机密码登录验证）
+继承AuthenticationProvider类
+authenticate(Authentication authentication)方法 
+作用：账号密码验证（通过手机号查找用户，查到后对比密码是否正确）
+将userId等信息封装成loginUser
+并将loginUser和用户的权限封装成UsernamePasswordAuthenticationToken返回
+
+FantUserDetailsService类
+继承UserDetailsService类
+loadUserByUsername(username)方法
+通过username（手机号）获取用户信息（员工信息），通过operationService（员工id）获取权限信息
+并封装成userDetails返回
+
+SimpleUsernamePasswordAuthenticationFilter类
+指定拦截路径（登录路径）
+将请求中的手机号和密码封装成FantUsernamePasswordAuthenticationToken，通过AuthenticationManager.authenticate来验证
+
+FantLoginUserHolderFilter
+通过SecurityContextHolder.getContext()得到SecurityContext
+再获取到loginUser,放到LoginUserHolder中
+
+总结，通过WebSecurityConfigurationAdapter做好配置（Filter拦截类（多种登录方式则有多个Filter类 ），Provider处理类（有个issupport方法表示对应哪个filter的认证方法，认证通过后放到SecurityContext中）登录完成后生成session，并将sessionid放到请求中）
+
+WebSecurityConfigurationAdapter -->SimpleUsernamePasswordAuthenticationFilter-->FantUsernamePasswordAuthenticationProvider-->FantUserDetailsService
+
+招行登录
+CMBAuthenticationFilter
+CMBAuthenticationProvider
+微信登录
+WechatAuthenticationFilter
+WechatAuthenticationProvider
+流程
+WebSecurityConfigurationAdapter -->WechatAuthenticationFilter（获取请求中的code,通过code获取openid,将openid封装成WechatAuthenticationToken（一种Authentication的子类）进行验证）-->WechatAuthenticationProvider（通过openid获取用户信息user_wechat表）
+微信和手机号如何绑定
+根据openid无法找到用户信息时，返回401，前端自动跳转到绑定页面，填入手机号生成新用户，自动和openid进行绑定（记录到user_wechat表）
+
+问题：权限授权？
+1.首先是可以在配置文档中，有个配置可以设定可以匿名访问的路径
+2.通过operationService后去系统中查找出所有的操作
+3.operation里带有访问路径和相关code编码，设置到urlRegistry.antMatchers.hasAnyAuthority中
+4.用户通过认证之后，会查询出与之相关的角色，和该角色所拥有的权限（既是code）（role_auth）（role_staff）,然后就可以鉴权
+
+RBAC权限控制
+我们系统的实现：
+role 角色
+role_auth 角色权限绑定（角色和操作绑定）
+role_staff 角色用户绑定
+staff 员工表
+operation 操作表
+resource 资源表
+resource_type 资源类别表
+
+
+
+SmartschoolWebSecurityConfiguration类
+
+问题：
+1.统一认证和业务系统互相独立，在统一认证登录成功后业务系统怎么知道登录成功
+
+2.一次登录成功后每次请求怎么获取loginUser
+答：
+FantLoginUserHolderFilter继承了OncePerRequestFilter，
+FantLoginUserHolderFilter中的逻辑是获取到SecurityContext，然后获取验证信息Authentication，若是登录成功的获取到里面的用户信息放到LoginUserHolder中
+LoginUserHolder中带有ThreadLocal，故为线程本地变量
